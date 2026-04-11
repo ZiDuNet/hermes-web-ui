@@ -29,7 +29,6 @@ export default defineConfig({
     },
   },
   server: {
-    compress: false,
     proxy: {
       '/api': createProxyConfig(),
       '/v1': createProxyConfig(),
