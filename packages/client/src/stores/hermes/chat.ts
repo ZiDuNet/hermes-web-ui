@@ -668,10 +668,11 @@ export const useChatStore = defineStore('chat', () => {
       const workspacesStore = useWorkspacesStore()
       const sessionModel = activeSession.value?.model || appStore.selectedModel
 
-      // 在前端直接拼接 workspace 上下文（与源项目一致）
+      // workspace 注入到请求，不修改用户显示的消息
+      let runInput: string | ChatMessage[] = inputText
       let instructions: string | undefined
       if (workspacesStore.activeWorkspace) {
-        inputText = `[Workspace: ${workspacesStore.activeWorkspace}]\n${inputText}`
+        runInput = `[Workspace: ${workspacesStore.activeWorkspace}]\n${inputText}`
         instructions =
           `Active workspace at session start: ${workspacesStore.activeWorkspace}\n` +
           'Every user message is prefixed with [Workspace: /absolute/path] indicating the ' +
@@ -685,7 +686,7 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       const run = await startRun({
-        input: inputText,
+        input: runInput,
         instructions,
         conversation_history: history,
         session_id: sid,
