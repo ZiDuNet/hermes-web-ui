@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage, NInput, NButton, NSpace } from 'naive-ui'
 import { useHermesConfigStore } from '@/stores/hermes/hermes-config'
@@ -9,6 +9,12 @@ const message = useMessage()
 const store = useHermesConfigStore()
 
 const localYaml = ref('')
+
+onMounted(() => {
+  if (!store.rawYaml) {
+    store.loadRaw()
+  }
+})
 
 watch(() => store.rawYaml, (val) => {
   if (!store.dirty) localYaml.value = val

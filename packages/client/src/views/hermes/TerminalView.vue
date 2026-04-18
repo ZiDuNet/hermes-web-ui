@@ -280,11 +280,8 @@ function buildWsUrl(): string {
     return `${wsProtocol}//${new URL(base).host}/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
   }
 
-  // Dev mode: connect directly to backend port; Production: same host
-  const host = import.meta.env.DEV
-    ? `${location.hostname}:8648`
-    : location.host;
-  return `${wsProtocol}//${host}/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  // Always use current host (Vite proxy handles dev mode, same-origin for production)
+  return `${wsProtocol}//${location.host}/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 }
 
 function connect() {
