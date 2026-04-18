@@ -40,7 +40,7 @@ function loadWorkspaces(): WorkspaceEntry[] {
     if (!existsSync(WORKSPACES_FILE)) return getDefaultWorkspaces()
     const raw = readFileSync(WORKSPACES_FILE, 'utf-8')
     const list: WorkspaceEntry[] = JSON.parse(raw)
-    return list.filter(w => existsSync(w.path))
+    return list
   } catch {
     return getDefaultWorkspaces()
   }
