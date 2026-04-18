@@ -233,11 +233,8 @@ async function initGatewayManager() {
   gatewayManager = new GatewayManager(activeProfile)
   setGatewayManager(gatewayManager)
 
-  // Detect all running gateways
+  // 只检测运行状态，不自动启动网关（与源项目保持一致）
   await gatewayManager.detectAllOnStartup()
-
-  // Start all gateways that aren't running
-  await gatewayManager.startAll()
 }
 
 bootstrap()
