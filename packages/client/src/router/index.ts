@@ -61,6 +61,11 @@ const router = createRouter({
       component: () => import('@/views/hermes/GatewaysView.vue'),
     },
     {
+      path: '/hermes/workspaces',
+      name: 'hermes.workspaces',
+      component: () => import('@/views/hermes/WorkspacesView.vue'),
+    },
+    {
       path: '/hermes/channels',
       name: 'hermes.channels',
       component: () => import('@/views/hermes/ChannelsView.vue'),

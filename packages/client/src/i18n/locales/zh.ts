@@ -50,6 +50,7 @@ export default {
     logs: '日志',
     usage: '用量',
     channels: '频道',
+    workspaces: '工作区',
     gateways: '网关',
     terminal: '终端',
     groupConversation: '对话',
@@ -495,5 +496,17 @@ export default {
     sessions: '会话',
     cost: '费用',
     noData: '暂无用量数据',
+  },
+
+  // 工作区管理
+  workspaces: {
+    title: '工作区管理',
+    addPlaceholder: '输入路径添加工作区，如 /home/user/project',
+    added: '工作区已添加',
+    addFailed: '添加工作区失败',
+    removed: '工作区已移除',
+    removeFailed: '移除工作区失败',
+    removeConfirm: '确认移除该工作区？',
+    empty: '暂无工作区，请添加一个路径',
   },
 }

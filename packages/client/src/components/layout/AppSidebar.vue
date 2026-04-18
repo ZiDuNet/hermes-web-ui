@@ -86,6 +86,12 @@ async function handleUpdate() {
             </svg>
             <span>{{ t("sidebar.channels") }}</span>
           </button>
+          <button class="nav-item" :class="{ active: selectedKey === 'hermes.workspaces' }" @click="handleNav('hermes.workspaces')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>{{ t("sidebar.workspaces") }}</span>
+          </button>
           <button class="nav-item" :class="{ active: selectedKey === 'hermes.skills' }" @click="handleNav('hermes.skills')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 2 7 12 12 22 7 12 2" />

@@ -50,6 +50,7 @@ export default {
     logs: 'Logs',
     usage: 'Usage',
     channels: 'Channels',
+    workspaces: 'Workspaces',
     gateways: 'Gateways',
     terminal: 'Terminal',
     groupConversation: 'Conversation',
@@ -493,5 +494,17 @@ export default {
     sessions: 'Sessions',
     cost: 'Cost',
     noData: 'No usage data',
+  },
+
+  // Workspaces management
+  workspaces: {
+    title: 'Workspaces',
+    addPlaceholder: 'Enter path to add workspace, e.g. /home/user/project',
+    added: 'Workspace added',
+    addFailed: 'Failed to add workspace',
+    removed: 'Workspace removed',
+    removeFailed: 'Failed to remove workspace',
+    removeConfirm: 'Remove this workspace?',
+    empty: 'No workspaces yet. Add a path to get started.',
   },
 }
