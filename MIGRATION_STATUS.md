@@ -99,6 +99,22 @@
 
 ## 架构决策 & 开发注意事项
 
+### 0. 技术选型反思：Python 后端可能更合适
+
+hermes-agent 和 hermes-webui 都是 Python 项目。本项目用 Node.js/Koa 做后端，导致所有摩擦点都来自语言不统一：
+
+| 问题 | Python 后端 | Node.js 后端（当前） |
+|------|-----------|-------------|
+| Config/Keys 元数据 | `from config import DEFAULT_CONFIG` 直接用 | 手动提取 Python 常量成 TS 文件 |
+| Workspace 注入 | `agent.run_conversation(persist_user_message=...)` 完整支持 | 只能用 Gateway 有限的 API 参数 |
+| system_prompt | `system_message` 持久化到 session | `ephemeral_system_prompt` 不持久化 |
+| hermes-agent 更新 | import 自动拿到最新 | 每次都要重新提取 TS 文件 |
+| 架构 | 一个进程，直接调用函数 | 两个进程，HTTP API 桥接 |
+
+如果后端用 Python（如 FastAPI），前端 Vue 3 不变，就能直接 import hermes-agent 模块，不需要 Gateway 中转，也不需要内联数据。当前方案功能完整但维护成本更高。
+
+---
+
 ### 1. Gateway 启动策略：只检测不自动启动
 
 源项目（hermes-webui）启动时**不自动启动 gateway**，只读取 PID 文件和 config.yaml 检测运行状态。用户需手动启动。
