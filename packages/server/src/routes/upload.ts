@@ -20,7 +20,7 @@ uploadRoutes.post('/upload', async (ctx) => {
     return
   }
 
-  await mkdir(config.uploadDir, { recursive: true })
+  await mkdir(config.uploadDir, { recursive: true, mode: 0o755 })
 
   // Read raw body
   const chunks: Buffer[] = []

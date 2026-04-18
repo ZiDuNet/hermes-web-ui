@@ -1,8 +1,10 @@
 import Router from '@koa/router'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, createReadStream } from 'fs'
-import { resolve, join, extname, basename, relative } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, createReadStream, rmSync, renameSync } from 'fs'
+import { execSync } from 'child_process'
+import { resolve, join, extname, basename, relative, dirname } from 'path'
 import { homedir } from 'os'
 import { createReadStream as fsCreateReadStream } from 'fs'
+import { randomBytes } from 'crypto'
 import { config } from '../../config'
 
 export const workspaceRoutes = new Router()
@@ -45,23 +47,32 @@ function loadWorkspaces(): WorkspaceEntry[] {
 }
 
 function saveWorkspaces(list: WorkspaceEntry[]) {
-  mkdirSync(config.dataDir, { recursive: true })
+  mkdirSync(config.dataDir, { recursive: true, mode: 0o755 })
   writeFileSync(WORKSPACES_FILE, JSON.stringify(list, null, 2), 'utf-8')
 }
 
 function getDefaultWorkspaces(): WorkspaceEntry[] {
-  return [{ path: homedir(), name: 'Home' }]
+  const ws = join(homedir(), 'workspace')
+  // Ensure default workspace dir exists
+  if (!existsSync(ws)) mkdirSync(ws, { recursive: true, mode: 0o755 })
+  return [{ path: ws, name: 'workspace' }]
 }
 
 function validatePath(p: string): { valid: boolean; resolved?: string; error?: string } {
   if (!p || typeof p !== 'string') return { valid: false, error: 'Path is required' }
   const resolved = resolve(p)
-  if (!existsSync(resolved)) return { valid: false, error: `Path does not exist: ${resolved}` }
   if (!isWindows) {
     for (const blocked of BLOCKED_ROOTS) {
       if (resolved === blocked || resolved.startsWith(blocked + '/')) {
         return { valid: false, error: `System directory not allowed: ${resolved}` }
       }
+    }
+  }
+  if (!existsSync(resolved)) {
+    try {
+      mkdirSync(resolved, { recursive: true, mode: 0o755 })
+    } catch {
+      return { valid: false, error: `Failed to create directory: ${resolved}` }
     }
   }
   return { valid: true, resolved }
@@ -127,6 +138,118 @@ workspaceRoutes.post('/api/hermes/session/workspace', (ctx) => {
   const idx = workspaces.findIndex(w => w.path === v.resolved)
   if (idx > 0) { const [entry] = workspaces.splice(idx, 1); workspaces.unshift(entry); saveWorkspaces(workspaces) }
   ctx.body = { ok: true, workspace: v.resolved }
+})
+
+// ── Directory browser ──────────────────────────────────────────
+
+// Browse directories (for workspace browser)
+workspaceRoutes.get('/api/hermes/workspace/browse', (ctx) => {
+  const dirPath = (ctx.query.path as string) || homedir()
+  const resolved = resolve(dirPath)
+
+  if (!isWindows) {
+    for (const blocked of BLOCKED_ROOTS) {
+      if (resolved === blocked || resolved.startsWith(blocked + '/')) {
+        ctx.status = 403; ctx.body = { error: 'Cannot browse system directory' }; return
+      }
+    }
+  }
+
+  if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+    ctx.status = 400; ctx.body = { error: 'Not a valid directory' }; return
+  }
+
+  const entries = readdirSync(resolved)
+    .map(name => {
+      const fullPath = join(resolved, name)
+      try {
+        const stat = statSync(fullPath)
+        if (!stat.isDirectory()) return null
+        return { name, path: fullPath }
+      } catch { return null }
+    })
+    .filter(Boolean) as { name: string; path: string }[]
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  ctx.body = { path: resolved, entries, parent: resolved === '/' ? null : dirname(resolved) }
+})
+
+// Create directory via browser
+workspaceRoutes.post('/api/hermes/workspace/browse/mkdir', (ctx) => {
+  const { path, name } = ctx.request.body as { path?: string; name?: string }
+  if (!path || !name) { ctx.status = 400; ctx.body = { error: 'path and name required' }; return }
+  const resolved = resolve(path)
+  const target = join(resolved, name)
+  if (!target.startsWith(resolved)) { ctx.status = 403; ctx.body = { error: 'Invalid path' }; return }
+  if (existsSync(target)) { ctx.status = 409; ctx.body = { error: 'Directory already exists' }; return }
+  mkdirSync(target, { recursive: true, mode: 0o755 })
+  ctx.body = { ok: true, path: target }
+})
+
+// Upload files to workspace directory
+workspaceRoutes.post('/api/hermes/workspace/file/upload', async (ctx) => {
+  const contentType = ctx.get('content-type') || ''
+  if (!contentType.startsWith('multipart/form-data')) {
+    ctx.status = 400; ctx.body = { error: 'Expected multipart/form-data' }; return
+  }
+
+  const boundary = '--' + contentType.split('boundary=')[1]
+  if (!boundary || boundary === '--undefined') {
+    ctx.status = 400; ctx.body = { error: 'Missing boundary' }; return
+  }
+
+  // Read raw body
+  const chunks: Buffer[] = []
+  for await (const chunk of ctx.req) chunks.push(chunk)
+  const body = Buffer.concat(chunks).toString('latin1')
+  const parts = body.split(boundary).slice(1, -1)
+
+  // Extract form fields
+  let workspace = ''
+  let relPath = ''
+  const results: { name: string; data: Buffer }[] = []
+
+  for (const part of parts) {
+    const headerEnd = part.indexOf('\r\n\r\n')
+    if (headerEnd === -1) continue
+    const header = part.substring(0, headerEnd)
+    const data = part.substring(headerEnd + 4, part.length - 2)
+
+    const nameMatch = header.match(/name="([^"]+)"/)
+    if (!nameMatch) continue
+    const fieldName = nameMatch[1]
+
+    const filenameMatch = header.match(/filename="([^"]+)"/)
+
+    if (fieldName === 'workspace') {
+      workspace = Buffer.from(data, 'binary').toString('utf-8')
+    } else if (fieldName === 'path') {
+      relPath = Buffer.from(data, 'binary').toString('utf-8')
+    } else if (fieldName === 'files' && filenameMatch) {
+      results.push({ name: filenameMatch[1], data: Buffer.from(data, 'binary') })
+    }
+  }
+
+  if (!workspace) { ctx.status = 400; ctx.body = { error: 'workspace is required' }; return }
+
+  const wsValidation = validatePath(workspace)
+  if (!wsValidation.valid || !wsValidation.resolved) { ctx.status = 400; ctx.body = { error: wsValidation.error }; return }
+
+  try {
+    const targetDir = safeResolve(wsValidation.resolved, relPath || '.')
+    const files: { name: string; path: string }[] = []
+
+    for (const entry of results) {
+      const target = join(targetDir, entry.name)
+      writeFileSync(target, entry.data)
+      files.push({ name: entry.name, path: target })
+    }
+
+    ctx.body = { files }
+  } catch (err: any) {
+    ctx.status = 400
+    ctx.body = { error: err.message }
+  }
 })
 
 // ── File system operations ──────────────────────────────────────
@@ -289,8 +412,113 @@ workspaceRoutes.post('/api/hermes/workspace/file/mkdir', (ctx) => {
   try {
     const target = safeResolve(wsValidation.resolved!, path)
     if (existsSync(target)) { ctx.status = 409; ctx.body = { error: 'Directory already exists' }; return }
-    mkdirSync(target, { recursive: true })
+    mkdirSync(target, { recursive: true, mode: 0o755 })
     ctx.body = { ok: true }
+  } catch (err: any) {
+    ctx.status = 400
+    ctx.body = { error: err.message }
+  }
+})
+
+// Delete file or directory
+workspaceRoutes.post('/api/hermes/workspace/file/delete', (ctx) => {
+  const { workspace, path } = ctx.request.body as { workspace?: string; path?: string }
+  if (!workspace || !path) { ctx.status = 400; ctx.body = { error: 'workspace and path are required' }; return }
+
+  const wsValidation = validatePath(workspace)
+  if (!wsValidation.valid || !wsValidation.resolved) { ctx.status = 400; ctx.body = { error: wsValidation.error }; return }
+
+  try {
+    const target = safeResolve(wsValidation.resolved!, path)
+    if (!existsSync(target)) { ctx.status = 404; ctx.body = { error: 'Not found' }; return }
+    rmSync(target, { recursive: true, force: true })
+    ctx.body = { ok: true }
+  } catch (err: any) {
+    ctx.status = 400
+    ctx.body = { error: err.message }
+  }
+})
+
+// Rename file or directory
+workspaceRoutes.post('/api/hermes/workspace/file/rename', (ctx) => {
+  const { workspace, path, newName } = ctx.request.body as { workspace?: string; path?: string; newName?: string }
+  if (!workspace || !path || !newName) { ctx.status = 400; ctx.body = { error: 'workspace, path, and newName are required' }; return }
+
+  const wsValidation = validatePath(workspace)
+  if (!wsValidation.valid || !wsValidation.resolved) { ctx.status = 400; ctx.body = { error: wsValidation.error }; return }
+
+  try {
+    const target = safeResolve(wsValidation.resolved!, path)
+    if (!existsSync(target)) { ctx.status = 404; ctx.body = { error: 'Not found' }; return }
+    const dest = join(dirname(target), newName)
+    if (!dest.startsWith(resolve(wsValidation.resolved!)) && !dest.startsWith(resolve(wsValidation.resolved!) + '/') && !dest.startsWith(resolve(wsValidation.resolved!) + '\\')) {
+      ctx.status = 403; ctx.body = { error: 'Invalid destination' }; return
+    }
+    if (existsSync(dest)) { ctx.status = 409; ctx.body = { error: 'Target already exists' }; return }
+    renameSync(target, dest)
+    ctx.body = { ok: true, newPath: relative(wsValidation.resolved!, dest).replace(/\\/g, '/') }
+  } catch (err: any) {
+    ctx.status = 400
+    ctx.body = { error: err.message }
+  }
+})
+
+// Git status for workspace
+workspaceRoutes.get('/api/hermes/workspace/git', (ctx) => {
+  const workspace = ctx.query.workspace as string
+  const rel = (ctx.query.path as string) || '.'
+  if (!workspace) { ctx.status = 400; ctx.body = { error: 'workspace is required' }; return }
+
+  const wsValidation = validatePath(workspace)
+  if (!wsValidation.valid || !wsValidation.resolved) { ctx.status = 400; ctx.body = { error: wsValidation.error }; return }
+
+  try {
+    const target = safeResolve(wsValidation.resolved!, rel)
+    // Check if .git exists
+    if (!existsSync(join(target, '.git'))) {
+      ctx.body = { git: false }
+      return
+    }
+
+    const run = (cmd: string) => {
+      try {
+        return execSync(cmd, { cwd: target, encoding: 'utf-8', timeout: 5000 }).trim()
+      } catch {
+        return ''
+      }
+    }
+
+    const branch = run('git rev-parse --abbrev-ref HEAD')
+    const shortStat = run('git diff --shortstat')
+    const stagedStat = run('git diff --cached --shortstat')
+
+    // Parse ahead/behind
+    const tracking = run('git rev-parse --abbrev-ref @{upstream} 2>/dev/null')
+    let ahead = 0
+    let behind = 0
+    if (tracking) {
+      const abRaw = run(`git rev-list --left-right --count HEAD...${tracking}`)
+      const parts = abRaw.split(/\s+/)
+      if (parts.length >= 2) {
+        ahead = parseInt(parts[0]) || 0
+        behind = parseInt(parts[1]) || 0
+      }
+    }
+
+    // Count modified/untracked
+    const modified = run('git diff --name-only').split('\n').filter(Boolean).length
+    const untracked = run('git ls-files --others --exclude-standard').split('\n').filter(Boolean).length
+    const staged = run('git diff --cached --name-only').split('\n').filter(Boolean).length
+
+    ctx.body = {
+      git: true,
+      branch,
+      modified,
+      untracked,
+      staged,
+      ahead,
+      behind,
+    }
   } catch (err: any) {
     ctx.status = 400
     ctx.body = { error: err.message }

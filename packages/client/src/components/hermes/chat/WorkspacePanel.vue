@@ -3,8 +3,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import { useWorkspacesStore } from '@/stores/hermes/workspaces'
-import { listDir, readFile, getRawFileUrl, saveFile, createFile, createDir } from '@/api/hermes/workspaces'
-import type { FileEntry, FileContent } from '@/api/hermes/workspaces'
+import { listDir, readFile, getRawFileUrl, saveFile, createFile, createDir, uploadFiles, deleteEntry, renameEntry, fetchGitStatus } from '@/api/hermes/workspaces'
+import type { FileEntry, FileContent, GitStatus } from '@/api/hermes/workspaces'
+
+const props = defineProps<{ workspaceOverride?: string }>()
 
 const workspacesStore = useWorkspacesStore()
 const { t } = useI18n()
@@ -13,6 +15,7 @@ const message = useMessage()
 const entries = ref<FileEntry[]>([])
 const currentDir = ref('.')
 const loading = ref(false)
+const gitStatus = ref<GitStatus>({ git: false })
 
 // Preview state
 const previewPath = ref('')
@@ -24,7 +27,7 @@ const editing = ref(false)
 // Expanded dirs cache
 const expandedDirs = ref<Set<string>>(new Set())
 
-const workspacePath = computed(() => workspacesStore.activeWorkspace)
+const workspacePath = computed(() => props.workspaceOverride || workspacesStore.activeWorkspace)
 const workspaceName = computed(() => workspacesStore.getWorkspaceName(workspacePath.value))
 
 // Breadcrumb
@@ -45,6 +48,8 @@ async function loadDirectory(path: string = '.') {
     else currentDir.value = path
     // Clear preview when navigating
     if (previewMode.value !== 'none') clearPreview()
+    // Load git status (non-blocking)
+    fetchGitStatus(workspacePath.value, path).then(s => { gitStatus.value = s }).catch(() => { gitStatus.value = { git: false } })
   } catch (err: any) {
     message.error(err.message || t('common.fetchFailed'))
   } finally {
@@ -204,11 +209,109 @@ async function handleCreate() {
   }
 }
 
+// ── Upload ─────────────────────────────────────────────────────
+
+const fileInputRef = ref<HTMLInputElement>()
+
+function triggerUpload() {
+  fileInputRef.value?.click()
+}
+
+async function handleUpload(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length || !workspacePath.value) return
+  const files = Array.from(input.files)
+  try {
+    await uploadFiles(workspacePath.value, currentDir.value, files)
+    message.success(t('chat.uploadSuccess'))
+    await loadDirectory(currentDir.value)
+  } catch (err: any) {
+    message.error(err.message || t('chat.uploadFailed'))
+  }
+  input.value = ''
+}
+
+// ── Delete / Rename ────────────────────────────────────────────
+
+async function handleDelete(entry: FileEntry) {
+  if (!workspacePath.value) return
+  if (!confirm(t('chat.deleteConfirm', { name: entry.name }))) return
+  try {
+    await deleteEntry(workspacePath.value, entry.path)
+    message.success(t('chat.deleted'))
+    // If deleting the file being previewed, clear preview
+    if (previewPath.value === entry.path) clearPreview()
+    await loadDirectory(currentDir.value)
+  } catch (err: any) {
+    message.error(err.message || t('chat.deleteFailed'))
+  }
+}
+
+const renamingEntry = ref<FileEntry | null>(null)
+const renameValue = ref('')
+
+function startRename(entry: FileEntry) {
+  renamingEntry.value = entry
+  renameValue.value = entry.name
+}
+
+async function handleRename() {
+  if (!workspacePath.value || !renamingEntry.value || !renameValue.value.trim()) return
+  try {
+    await renameEntry(workspacePath.value, renamingEntry.value.path, renameValue.value.trim())
+    message.success(t('chat.renamed'))
+    // If renaming the file being previewed, update path
+    if (previewPath.value === renamingEntry.value.path) {
+      const basePath = currentDir.value === '.' ? '' : currentDir.value + '/'
+      previewPath.value = basePath + renameValue.value.trim()
+    }
+    renamingEntry.value = null
+    renameValue.value = ''
+    await loadDirectory(currentDir.value)
+  } catch (err: any) {
+    message.error(err.message || t('chat.renameFailed'))
+  }
+}
+
+// ── Drag & drop upload ────────────────────────────────────────
+
+const dragOver = ref(false)
+
+function handleDragOver(e: DragEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  dragOver.value = true
+}
+
+function handleDragLeave(e: DragEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  dragOver.value = false
+}
+
+async function handleDrop(e: DragEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  dragOver.value = false
+  if (!e.dataTransfer?.files?.length || !workspacePath.value) return
+  const files = Array.from(e.dataTransfer.files)
+  try {
+    await uploadFiles(workspacePath.value, currentDir.value, files)
+    message.success(t('chat.uploadSuccess'))
+    await loadDirectory(currentDir.value)
+  } catch (err: any) {
+    message.error(err.message || t('chat.uploadFailed'))
+  }
+}
+
 // ── Init ────────────────────────────────────────────────────────
 
-watch(() => workspacesStore.activeWorkspace, (ws) => {
-  if (ws) loadDirectory('.')
-})
+watch(
+  () => props.workspaceOverride || workspacesStore.activeWorkspace,
+  (ws) => {
+    if (ws) loadDirectory('.')
+  }
+)
 
 onMounted(() => {
   if (workspacePath.value) loadDirectory('.')
@@ -221,6 +324,10 @@ onMounted(() => {
     <div class="ws-header">
       <span class="ws-title">{{ workspaceName }}</span>
       <div class="ws-actions">
+        <button class="ws-btn" :title="t('chat.uploadFile')" @click="triggerUpload">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
+        <input ref="fileInputRef" type="file" multiple class="hidden-input" @change="handleUpload" />
         <button class="ws-btn" :title="t('chat.newFile')" @click="promptNewFile">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -231,6 +338,19 @@ onMounted(() => {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         </button>
       </div>
+    </div>
+
+    <!-- Git status bar -->
+    <div v-if="gitStatus.git" class="ws-git-bar">
+      <span class="git-branch">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        {{ gitStatus.branch }}
+      </span>
+      <span v-if="gitStatus.modified" class="git-badge git-modified">{{ t('chat.gitModified', { n: gitStatus.modified }) }}</span>
+      <span v-if="gitStatus.staged" class="git-badge git-staged">{{ t('chat.gitStaged', { n: gitStatus.staged }) }}</span>
+      <span v-if="gitStatus.untracked" class="git-badge git-untracked">{{ t('chat.gitUntracked', { n: gitStatus.untracked }) }}</span>
+      <span v-if="gitStatus.ahead" class="git-badge git-ahead">{{ t('chat.gitAhead', { n: gitStatus.ahead }) }}</span>
+      <span v-if="gitStatus.behind" class="git-badge git-behind">{{ t('chat.gitBehind', { n: gitStatus.behind }) }}</span>
     </div>
 
     <!-- Breadcrumb -->
@@ -260,21 +380,54 @@ onMounted(() => {
     </div>
 
     <!-- File tree -->
-    <div class="ws-file-list" v-if="previewMode === 'none'">
+    <div
+      class="ws-file-list"
+      :class="{ 'ws-drag-over': dragOver }"
+      v-if="previewMode === 'none'"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
       <div v-if="loading" class="ws-loading">{{ t('common.loading') }}</div>
       <div v-else-if="entries.length === 0" class="ws-empty">{{ t('chat.emptyDir') }}</div>
       <div
         v-for="entry in entries"
         :key="entry.path"
         class="ws-entry"
-        @click="handleEntryClick(entry)"
+        @click="renamingEntry?.path !== entry.path && handleEntryClick(entry)"
       >
         <span class="ws-entry-icon" :class="entry.type">
           <svg v-if="entry.type === 'dir'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </span>
-        <span class="ws-entry-name">{{ entry.name }}</span>
-        <span v-if="entry.size !== null" class="ws-entry-size">{{ entry.size >= 1024 ? (entry.size / 1024).toFixed(1) + 'K' : entry.size + 'B' }}</span>
+        <template v-if="renamingEntry?.path === entry.path">
+          <input
+            v-model="renameValue"
+            class="ws-new-input"
+            style="flex:1"
+            @keydown.enter="handleRename"
+            @keydown.escape="renamingEntry = null"
+            @click.stop
+          />
+          <button class="ws-btn ws-btn-confirm" @click.stop="handleRename" :title="t('common.ok')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+          <button class="ws-btn" @click.stop="renamingEntry = null" :title="t('common.cancel')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </template>
+        <template v-else>
+          <span class="ws-entry-name">{{ entry.name }}</span>
+          <span v-if="entry.size !== null" class="ws-entry-size">{{ entry.size >= 1024 ? (entry.size / 1024).toFixed(1) + 'K' : entry.size + 'B' }}</span>
+          <div class="ws-entry-actions">
+            <button class="ws-btn ws-btn-mini" @click.stop="startRename(entry)" :title="t('chat.renameFile')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+            <button class="ws-btn ws-btn-mini ws-btn-danger" @click.stop="handleDelete(entry)" :title="t('chat.deleteFile')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -380,6 +533,44 @@ onMounted(() => {
   &.ws-btn-confirm { color: $success; }
 }
 
+.hidden-input {
+  display: none;
+}
+
+// ── Git status ────────────────────────────────────────────────
+
+.ws-git-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid $border-light;
+}
+
+.git-branch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.git-badge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: $bg-secondary;
+  color: $text-muted;
+}
+
+.git-modified { color: #e5873a; background: rgba(229, 135, 58, 0.1); }
+.git-staged { color: #2ea043; background: rgba(46, 160, 67, 0.1); }
+.git-untracked { color: $text-muted; }
+.git-ahead { color: #0550ae; background: rgba(5, 80, 174, 0.1); }
+.git-behind { color: #953800; background: rgba(149, 56, 0, 0.1); }
+
 // ── Breadcrumb ────────────────────────────────────────────────
 
 .ws-breadcrumb {
@@ -430,6 +621,14 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 0 8px;
+  transition: background $transition-fast;
+
+  &.ws-drag-over {
+    background: rgba(0, 120, 212, 0.05);
+    outline: 2px dashed rgba(0, 120, 212, 0.3);
+    outline-offset: -4px;
+    border-radius: $radius-sm;
+  }
 }
 
 .ws-loading, .ws-empty {
@@ -473,6 +672,24 @@ onMounted(() => {
   font-size: 10px;
   color: $text-muted;
   flex-shrink: 0;
+}
+
+.ws-entry-actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity $transition-fast;
+}
+
+.ws-entry:hover .ws-entry-actions {
+  opacity: 1;
+}
+
+.ws-btn-mini {
+  width: 20px;
+  height: 20px;
+
+  &.ws-btn-danger:hover { color: $error; }
 }
 
 // ── Preview ───────────────────────────────────────────────────

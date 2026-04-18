@@ -75,6 +75,16 @@ const router = createRouter({
       name: 'hermes.terminal',
       component: () => import('@/views/hermes/TerminalView.vue'),
     },
+    {
+      path: '/hermes/config',
+      name: 'hermes.config',
+      component: () => import('@/views/hermes/ConfigView.vue'),
+    },
+    {
+      path: '/hermes/keys',
+      name: 'hermes.keys',
+      component: () => import('@/views/hermes/KeysView.vue'),
+    },
   ],
 })
 

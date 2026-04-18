@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAppStore } from './app'
 import { useProfilesStore } from './profiles'
+import { useWorkspacesStore } from './workspaces'
 
 export interface Attachment {
   id: string
@@ -664,12 +665,14 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       const appStore = useAppStore()
+      const workspacesStore = useWorkspacesStore()
       const sessionModel = activeSession.value?.model || appStore.selectedModel
       const run = await startRun({
         input: inputText,
         conversation_history: history,
         session_id: sid,
         model: sessionModel || undefined,
+        workspace: workspacesStore.activeWorkspace || undefined,
       })
 
       const runId = (run as any).run_id || (run as any).id

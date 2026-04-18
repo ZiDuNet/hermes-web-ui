@@ -1,28 +1,24 @@
 <script setup lang="ts">
 import { useWorkspacesStore } from '@/stores/hermes/workspaces'
-import { NButton, NInput, NPopconfirm, NSpin, NTooltip, useMessage } from 'naive-ui'
+import { NButton, NPopconfirm, NSpin, NTooltip, useMessage } from 'naive-ui'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import DirectoryBrowser from './DirectoryBrowser.vue'
+import FileManagerModal from './FileManagerModal.vue'
 
 const { t } = useI18n()
 const message = useMessage()
 const workspacesStore = useWorkspacesStore()
 
-const newPath = ref('')
-const adding = ref(false)
+const showBrowser = ref(false)
+const managePath = ref('')
 
-async function handleAdd() {
-  const path = newPath.value.trim()
-  if (!path) return
-  adding.value = true
+async function handleAdd(path: string) {
   try {
     await workspacesStore.addWorkspace(path)
-    newPath.value = ''
     message.success(t('workspaces.added'))
   } catch (err: any) {
     message.error(err.message || t('workspaces.addFailed'))
-  } finally {
-    adding.value = false
   }
 }
 
@@ -33,6 +29,10 @@ async function handleRemove(path: string) {
   } catch (err: any) {
     message.error(err.message || t('workspaces.removeFailed'))
   }
+}
+
+function openFileManager(path: string) {
+  managePath.value = path
 }
 
 function shortPath(path: string): string {
@@ -47,14 +47,11 @@ function shortPath(path: string): string {
   <div class="workspaces-manager">
     <!-- Add workspace -->
     <div class="add-row">
-      <NInput
-        v-model:value="newPath"
-        :placeholder="t('workspaces.addPlaceholder')"
-        size="small"
-        @keydown.enter="handleAdd"
-      />
-      <NButton type="primary" size="small" :loading="adding" @click="handleAdd">
-        {{ t('common.add') }}
+      <NButton type="primary" size="small" @click="showBrowser = true">
+        <template #icon>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </template>
+        {{ t('workspaces.addWorkspace') }}
       </NButton>
     </div>
 
@@ -86,19 +83,45 @@ function shortPath(path: string): string {
               </NTooltip>
             </div>
           </div>
-          <NPopconfirm @positive-click="handleRemove(ws.path)">
-            <template #trigger>
-              <NButton quaternary size="tiny" type="error">
-                <template #icon>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </template>
-              </NButton>
-            </template>
-            {{ t('workspaces.removeConfirm') }}
-          </NPopconfirm>
+          <div class="ws-actions">
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <NButton quaternary size="tiny" @click="openFileManager(ws.path)">
+                  <template #icon>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </template>
+                </NButton>
+              </template>
+              {{ t('workspaces.manageFiles') }}
+            </NTooltip>
+            <NPopconfirm @positive-click="handleRemove(ws.path)">
+              <template #trigger>
+                <NButton quaternary size="tiny" type="error">
+                  <template #icon>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </template>
+                </NButton>
+              </template>
+              {{ t('workspaces.removeConfirm') }}
+            </NPopconfirm>
+          </div>
         </div>
       </div>
     </NSpin>
+
+    <!-- Directory browser modal -->
+    <DirectoryBrowser
+      :show="showBrowser"
+      @update:show="showBrowser = $event"
+      @select="handleAdd"
+    />
+
+    <!-- File manager modal -->
+    <FileManagerModal
+      :show="!!managePath"
+      :workspace-path="managePath"
+      @update:show="managePath = $event ? managePath : ''"
+    />
   </div>
 </template>
 
@@ -189,5 +212,12 @@ function shortPath(path: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ws-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 </style>

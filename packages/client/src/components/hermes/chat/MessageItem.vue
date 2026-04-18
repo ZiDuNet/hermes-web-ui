@@ -124,7 +124,7 @@ const formattedToolResult = computed(() => {
       <div class="msg-body">
         <img
           v-if="message.role === 'assistant'"
-          src="/logo.png"
+          src="/icon.png"
           alt="Hermes"
           class="msg-avatar"
         />

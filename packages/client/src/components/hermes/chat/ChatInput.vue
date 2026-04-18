@@ -29,6 +29,10 @@ const showModelDropdown = ref(false)
 const showWorkspaceDropdown = ref(false)
 const modelSearch = ref('')
 
+// Dropdown position (fixed positioning to avoid overflow clipping)
+const dropdownStyle = ref<Record<string, string>>({})
+const activeDropdownRef = ref<HTMLElement | null>(null)
+
 // ── Voice input (Web Speech API) ────────────────────────────────
 const isRecording = ref(false)
 const micSupported = ref(false)
@@ -196,23 +200,37 @@ async function handleAddWorkspace() {
 
 // ── Dropdown toggles ────────────────────────────────────────────
 
-function toggleProfileDropdown() {
+function toggleProfileDropdown(e: MouseEvent) {
   showProfileDropdown.value = !showProfileDropdown.value
   showModelDropdown.value = false
   showWorkspaceDropdown.value = false
+  if (showProfileDropdown.value) positionDropdown(e)
 }
 
-function toggleModelDropdown() {
+function toggleModelDropdown(e: MouseEvent) {
   showModelDropdown.value = !showModelDropdown.value
   showProfileDropdown.value = false
   showWorkspaceDropdown.value = false
   modelSearch.value = ''
+  if (showModelDropdown.value) positionDropdown(e)
 }
 
-function toggleWorkspaceDropdown() {
+function toggleWorkspaceDropdown(e: MouseEvent) {
   showWorkspaceDropdown.value = !showWorkspaceDropdown.value
   showProfileDropdown.value = false
   showModelDropdown.value = false
+  if (showWorkspaceDropdown.value) positionDropdown(e)
+}
+
+function positionDropdown(e: MouseEvent) {
+  const btn = (e.currentTarget as HTMLElement)
+  const rect = btn.getBoundingClientRect()
+  dropdownStyle.value = {
+    position: 'fixed',
+    bottom: (window.innerHeight - rect.top + 6) + 'px',
+    left: rect.left + 'px',
+    zIndex: '1000',
+  }
 }
 
 // ── File attachment helpers ─────────────────────────────────────
@@ -405,12 +423,6 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
             <span class="chip-label">{{ activeProfileName }}</span>
             <svg class="chip-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div v-if="showProfileDropdown" class="chip-dropdown" @click.stop>
-            <div v-for="p in profileOptions" :key="p.name" class="dropdown-item" :class="{ active: p.name === activeProfileName }" @click="selectProfile(p.name)">
-              <span class="dropdown-item-label">{{ p.name }}</span>
-              <span v-if="p.active" class="dropdown-item-badge">●</span>
-            </div>
-          </div>
         </div>
 
         <!-- Workspace chip -->
@@ -420,28 +432,6 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
             <span class="chip-label">{{ currentWorkspaceLabel }}</span>
             <svg class="chip-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div v-if="showWorkspaceDropdown" class="chip-dropdown workspace-dropdown" @click.stop>
-            <div
-              v-for="ws in workspacesStore.workspaces"
-              :key="ws.path"
-              class="dropdown-item"
-              :class="{ active: ws.path === workspacesStore.activeWorkspace }"
-              @click="selectWorkspace(ws.path)"
-            >
-              <span class="dropdown-item-label">{{ ws.name }}</span>
-              <span class="dropdown-item-path">{{ ws.path }}</span>
-            </div>
-            <div class="dropdown-separator"></div>
-            <div class="dropdown-add-row">
-              <input
-                v-model="newWorkspacePath"
-                class="dropdown-input"
-                :placeholder="t('chat.workspaceAddPlaceholder')"
-                @keydown.enter="handleAddWorkspace"
-              />
-              <button class="dropdown-add-btn" @click="handleAddWorkspace">{{ t('common.add') }}</button>
-            </div>
-          </div>
         </div>
 
         <!-- Model chip -->
@@ -451,23 +441,6 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
             <span class="chip-label">{{ currentModelLabel }}</span>
             <svg class="chip-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div v-if="showModelDropdown" class="chip-dropdown model-dropdown" @click.stop>
-            <input v-model="modelSearch" class="dropdown-search" :placeholder="t('chat.searchModel')" />
-            <div class="dropdown-scroll">
-              <div v-for="group in filteredModelGroups" :key="group.provider" class="dropdown-group">
-                <div class="dropdown-group-label">{{ group.label }}</div>
-                <div
-                  v-for="m in group.models"
-                  :key="m"
-                  class="dropdown-item"
-                  :class="{ active: m === appStore.selectedModel }"
-                  @click="selectModel(m, group.provider)"
-                >
-                  <span class="dropdown-item-label">{{ getModelDisplayName(m) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -483,6 +456,62 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
         </NButton>
       </div>
     </div>
+
+    <!-- Teleported dropdowns (fixed positioning) -->
+    <Teleport to="body">
+      <!-- Profile dropdown -->
+      <div v-if="showProfileDropdown" class="chip-dropdown" :style="dropdownStyle" @click.stop>
+        <div v-for="p in profileOptions" :key="p.name" class="dropdown-item" :class="{ active: p.name === activeProfileName }" @click="selectProfile(p.name)">
+          <span class="dropdown-item-label">{{ p.name }}</span>
+          <span v-if="p.active" class="dropdown-item-badge">●</span>
+        </div>
+        <div v-if="profileOptions.length === 0" class="dropdown-empty">{{ t('common.loading') }}</div>
+      </div>
+
+      <!-- Workspace dropdown -->
+      <div v-if="showWorkspaceDropdown" class="chip-dropdown workspace-dropdown" :style="dropdownStyle" @click.stop>
+        <div
+          v-for="ws in workspacesStore.workspaces"
+          :key="ws.path"
+          class="dropdown-item"
+          :class="{ active: ws.path === workspacesStore.activeWorkspace }"
+          @click="selectWorkspace(ws.path)"
+        >
+          <span class="dropdown-item-label">{{ ws.name }}</span>
+          <span class="dropdown-item-path">{{ ws.path }}</span>
+        </div>
+        <div class="dropdown-separator"></div>
+        <div class="dropdown-add-row">
+          <input
+            v-model="newWorkspacePath"
+            class="dropdown-input"
+            :placeholder="t('chat.workspaceAddPlaceholder')"
+            @keydown.enter="handleAddWorkspace"
+          />
+          <button class="dropdown-add-btn" @click="handleAddWorkspace">{{ t('common.add') }}</button>
+        </div>
+      </div>
+
+      <!-- Model dropdown -->
+      <div v-if="showModelDropdown" class="chip-dropdown model-dropdown" :style="dropdownStyle" @click.stop>
+        <input v-model="modelSearch" class="dropdown-search" :placeholder="t('chat.searchModel')" />
+        <div class="dropdown-scroll">
+          <div v-for="group in filteredModelGroups" :key="group.provider" class="dropdown-group">
+            <div class="dropdown-group-label">{{ group.label }}</div>
+            <div
+              v-for="m in group.models"
+              :key="m"
+              class="dropdown-item"
+              :class="{ active: m === appStore.selectedModel }"
+              @click="selectModel(m, group.provider)"
+            >
+              <span class="dropdown-item-label">{{ getModelDisplayName(m) }}</span>
+            </div>
+          </div>
+          <div v-if="filteredModelGroups.length === 0" class="dropdown-empty">{{ t('common.loading') }}</div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -733,16 +762,13 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
 // ── Dropdown ──────────────────────────────────────────────────
 
 .chip-dropdown {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
   min-width: 200px;
   max-width: 320px;
   background: $bg-card;
   border: 1px solid $border-color;
   border-radius: $radius-md;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 100;
+  z-index: 1000;
   padding: 4px;
 
   .dark & {
@@ -860,9 +886,152 @@ function isImage(type: string): boolean { return type.startsWith('image/') }
   padding: 6px 10px 2px;
 }
 
+.dropdown-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: $text-muted;
+  text-align: center;
+}
+
 // Mobile
 @media (max-width: $breakpoint-mobile) {
   .chip-label { max-width: 60px; }
   .composer-footer { padding: 6px 8px; }
+}
+</style>
+
+<!-- Non-scoped styles for Teleported dropdowns (they render outside this component's scope) -->
+<style lang="scss">
+@use '@/styles/variables' as *;
+
+.chip-dropdown {
+  min-width: 200px;
+  max-width: 320px;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-md;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  padding: 4px;
+
+  .dark & {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    font-size: 12px;
+    color: $text-primary;
+    transition: background $transition-fast;
+
+    &:hover { background: $bg-secondary; }
+    &.active { color: $accent-primary; font-weight: 600; }
+  }
+
+  .dropdown-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dropdown-item-badge {
+    color: $success;
+    font-size: 10px;
+  }
+
+  .dropdown-item-path {
+    font-size: 10px;
+    color: $text-muted;
+    margin-left: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dropdown-separator {
+    height: 1px;
+    background: $border-color;
+    margin: 4px 0;
+  }
+
+  .dropdown-add-row {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .dropdown-input {
+    flex: 1;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: $font-ui;
+    background: $bg-input;
+    color: $text-primary;
+    outline: none;
+    min-width: 0;
+
+    &:focus { border-color: $accent-primary; }
+  }
+
+  .dropdown-add-btn {
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    background: $bg-secondary;
+    color: $text-primary;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background $transition-fast;
+
+    &:hover { background: $accent-primary; color: var(--text-on-accent); }
+  }
+
+  .dropdown-search {
+    width: 100%;
+    border: 1px solid $border-color;
+    border-radius: $radius-sm;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: $font-ui;
+    background: $bg-input;
+    color: $text-primary;
+    outline: none;
+    margin-bottom: 4px;
+
+    &:focus { border-color: $accent-primary; }
+  }
+
+  .dropdown-scroll {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .dropdown-group-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: $text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 6px 10px 2px;
+  }
+
+  .dropdown-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: $text-muted;
+    text-align: center;
+  }
+}
+
+.chip-dropdown.model-dropdown {
+  max-width: 360px;
 }
 </style>

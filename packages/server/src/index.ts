@@ -61,8 +61,8 @@ let gatewayPid: number | null = null
 let gatewayManager: any = null
 
 export async function bootstrap() {
-  await mkdir(config.uploadDir, { recursive: true })
-  await mkdir(config.dataDir, { recursive: true })
+  await mkdir(config.uploadDir, { recursive: true, mode: 0o755 })
+  await mkdir(config.dataDir, { recursive: true, mode: 0o755 })
 
   // Auth (after mkdir so data dir exists)
   const authToken = await getToken()
