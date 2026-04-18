@@ -3,8 +3,8 @@ import { readFile, writeFile, copyFile } from 'fs/promises'
 import { resolve } from 'path'
 import YAML from 'js-yaml'
 import { getActiveConfigPath } from '../../services/hermes/hermes-profile'
+import { getGatewayManager } from './gateways'
 
-const sharedDir = resolve(__dirname, '../../shared')
 const configPath = () => getActiveConfigPath()
 
 async function readConfig(): Promise<Record<string, any>> {
@@ -100,22 +100,28 @@ hermesConfigRoutes.put('/api/hermes/hermes-config', async (ctx) => {
   }
 })
 
-// GET /api/hermes/hermes-config/defaults — return defaults JSON
+// GET /api/hermes/hermes-config/defaults — 从 Gateway 获取
 hermesConfigRoutes.get('/api/hermes/hermes-config/defaults', async (ctx) => {
   try {
-    const raw = await readFile(resolve(sharedDir, 'hermes-defaults.json'), 'utf-8')
-    ctx.body = JSON.parse(raw)
+    const mgr = getGatewayManager()
+    const upstream = mgr ? mgr.getUpstream() : 'http://127.0.0.1:8642'
+    const res = await fetch(`${upstream}/api/config/defaults`, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) throw new Error(`Gateway returned ${res.status}`)
+    ctx.body = await res.json()
   } catch (err: any) {
     ctx.status = 500
     ctx.body = { error: err.message }
   }
 })
 
-// GET /api/hermes/hermes-config/schema — return schema JSON
+// GET /api/hermes/hermes-config/schema — 从 Gateway 获取
 hermesConfigRoutes.get('/api/hermes/hermes-config/schema', async (ctx) => {
   try {
-    const raw = await readFile(resolve(sharedDir, 'hermes-schema.json'), 'utf-8')
-    ctx.body = JSON.parse(raw)
+    const mgr = getGatewayManager()
+    const upstream = mgr ? mgr.getUpstream() : 'http://127.0.0.1:8642'
+    const res = await fetch(`${upstream}/api/config/schema`, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) throw new Error(`Gateway returned ${res.status}`)
+    ctx.body = await res.json()
   } catch (err: any) {
     ctx.status = 500
     ctx.body = { error: err.message }
