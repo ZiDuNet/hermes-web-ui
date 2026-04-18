@@ -6,6 +6,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ChatInput from './ChatInput.vue'
 import MessageList from './MessageList.vue'
+import TodoPanel from './TodoPanel.vue'
+import WorkspacePanel from './WorkspacePanel.vue'
 
 const chatStore = useChatStore()
 const message = useMessage()
@@ -20,6 +22,8 @@ const { t } = useI18n()
 const showSessions = ref(
   typeof window === 'undefined' || !window.matchMedia('(max-width: 768px)').matches,
 )
+const showTodoPanel = ref(false)
+const showWorkspacePanel = ref(false)
 let mobileQuery: MediaQueryList | null = null
 
 function handleSessionClick(sessionId: string) {
@@ -375,6 +379,7 @@ async function handleRenameConfirm() {
 
     <!-- Chat Area -->
     <div class="chat-main">
+      <div class="chat-content-area">
       <header class="chat-header">
         <div class="header-left">
           <NButton quaternary size="small" @click="showSessions = !showSessions" circle>
@@ -386,6 +391,26 @@ async function handleRenameConfirm() {
           <span v-if="activeSessionSource" class="source-badge">{{ getSourceLabel(activeSessionSource) }}</span>
         </div>
         <div class="header-actions">
+          <NTooltip trigger="hover">
+            <template #trigger>
+              <NButton quaternary size="small" :type="showWorkspacePanel ? 'primary' : undefined" @click="showWorkspacePanel = !showWorkspacePanel" circle>
+                <template #icon>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </template>
+              </NButton>
+            </template>
+            {{ t('chat.workspace') }}
+          </NTooltip>
+          <NTooltip trigger="hover">
+            <template #trigger>
+              <NButton quaternary size="small" :type="showTodoPanel ? 'primary' : undefined" @click="showTodoPanel = !showTodoPanel" circle>
+                <template #icon>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+                </template>
+              </NButton>
+            </template>
+            {{ t('chat.currentTasks') }}
+          </NTooltip>
           <NTooltip trigger="hover">
             <template #trigger>
               <NButton quaternary size="small" @click="copySessionId()" circle>
@@ -410,6 +435,27 @@ async function handleRenameConfirm() {
         <span>{{ formatTokens(totalTokens) }} / {{ formatTokens(contextWindow) }}</span>
       </div>
       <ChatInput />
+      </div>
+      <!-- Todo sidebar (right side, toggleable) -->
+      <aside v-if="showTodoPanel" class="todo-sidebar">
+        <div class="todo-sidebar-header">
+          <span class="todo-sidebar-title">{{ t('chat.currentTasks') }}</span>
+          <button class="todo-close-btn" @click="showTodoPanel = false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <TodoPanel />
+      </aside>
+      <!-- Workspace panel (right side, toggleable) -->
+      <aside v-if="showWorkspacePanel" class="workspace-sidebar">
+        <div class="todo-sidebar-header">
+          <span class="todo-sidebar-title">{{ t('chat.workspace') }}</span>
+          <button class="todo-close-btn" @click="showWorkspacePanel = false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <WorkspacePanel />
+      </aside>
     </div>
   </div>
 </template>
@@ -650,6 +696,13 @@ async function handleRenameConfirm() {
 .chat-main {
   flex: 1;
   display: flex;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.chat-content-area {
+  flex: 1;
+  display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
@@ -705,6 +758,61 @@ async function handleRenameConfirm() {
   font-size: 11px;
   color: $text-muted;
   flex-shrink: 0;
+}
+
+// ── Todo sidebar (right panel) ─────────────────────────────────
+
+.todo-sidebar {
+  width: 260px;
+  border-left: 1px solid $border-color;
+  flex-shrink: 0;
+  background: $bg-card;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.todo-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 14px 12px;
+  border-bottom: 1px solid $border-light;
+  flex-shrink: 0;
+}
+
+.todo-sidebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.todo-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text-secondary;
+  cursor: pointer;
+  transition: background $transition-fast, color $transition-fast;
+
+  &:hover { background: $bg-secondary; color: $text-primary; }
+}
+
+.workspace-sidebar {
+  width: 300px;
+  border-left: 1px solid $border-color;
+  flex-shrink: 0;
+  background: $bg-card;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 @media (max-width: $breakpoint-mobile) {
