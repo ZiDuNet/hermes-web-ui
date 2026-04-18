@@ -3,7 +3,8 @@ import { readFile, writeFile, copyFile } from 'fs/promises'
 import { resolve } from 'path'
 import YAML from 'js-yaml'
 import { getActiveConfigPath } from '../../services/hermes/hermes-profile'
-import { getGatewayManager } from './gateways'
+import { DEFAULT_CONFIG } from '../../shared/hermes-defaults'
+import { SCHEMA_OVERRIDES, CATEGORY_MERGE, CATEGORY_ORDER } from '../../shared/hermes-schema-meta'
 
 const configPath = () => getActiveConfigPath()
 
@@ -68,6 +69,57 @@ function denormalizeConfig(flat: Record<string, any>, disk: Record<string, any>)
   return result
 }
 
+/** Infer UI field type from a JS value (mirrors web_server.py _infer_type) */
+function inferType(value: any): string {
+  if (typeof value === 'boolean') return 'boolean'
+  if (typeof value === 'number') return 'number'
+  if (Array.isArray(value)) return 'list'
+  if (value && typeof value === 'object') return 'object'
+  return 'string'
+}
+
+/** Build flat dot-path schema from DEFAULT_CONFIG (mirrors web_server.py _build_schema_from_config) */
+function buildConfigSchema(): Record<string, any> {
+  const schema: Record<string, any> = {}
+
+  function walk(obj: Record<string, any>, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key
+      if (fullKey === '_config_version') continue
+
+      const category = prefix
+        ? prefix.split('.')[0]
+        : (value && typeof value === 'object' && !Array.isArray(value) ? key : 'general')
+
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        walk(value, fullKey)
+      } else {
+        const entry: Record<string, any> = {
+          type: inferType(value),
+          description: fullKey.replace(/\./g, ' → ').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          category: CATEGORY_MERGE[category] || category,
+        }
+        if (SCHEMA_OVERRIDES[fullKey]) {
+          Object.assign(entry, SCHEMA_OVERRIDES[fullKey])
+        }
+        schema[fullKey] = entry
+      }
+    }
+  }
+
+  walk(DEFAULT_CONFIG)
+
+  // Inject virtual model_context_length after model (same as web_server.py)
+  const ordered: Record<string, any> = {}
+  for (const [k, v] of Object.entries(schema)) {
+    ordered[k] = v
+    if (k === 'model') {
+      ordered['model_context_length'] = SCHEMA_OVERRIDES['model_context_length']
+    }
+  }
+  return ordered
+}
+
 export const hermesConfigRoutes = new Router()
 
 // GET /api/hermes/hermes-config — read full normalized config
@@ -100,32 +152,14 @@ hermesConfigRoutes.put('/api/hermes/hermes-config', async (ctx) => {
   }
 })
 
-// GET /api/hermes/hermes-config/defaults — 从 Gateway 获取
+// GET /api/hermes/hermes-config/defaults — 从本地内联数据返回
 hermesConfigRoutes.get('/api/hermes/hermes-config/defaults', async (ctx) => {
-  try {
-    const mgr = getGatewayManager()
-    const upstream = mgr ? mgr.getUpstream() : 'http://127.0.0.1:8642'
-    const res = await fetch(`${upstream}/api/config/defaults`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) throw new Error(`Gateway returned ${res.status}`)
-    ctx.body = await res.json()
-  } catch (err: any) {
-    ctx.status = 500
-    ctx.body = { error: err.message }
-  }
+  ctx.body = DEFAULT_CONFIG
 })
 
-// GET /api/hermes/hermes-config/schema — 从 Gateway 获取
+// GET /api/hermes/hermes-config/schema — 从本地内联数据构建
 hermesConfigRoutes.get('/api/hermes/hermes-config/schema', async (ctx) => {
-  try {
-    const mgr = getGatewayManager()
-    const upstream = mgr ? mgr.getUpstream() : 'http://127.0.0.1:8642'
-    const res = await fetch(`${upstream}/api/config/schema`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) throw new Error(`Gateway returned ${res.status}`)
-    ctx.body = await res.json()
-  } catch (err: any) {
-    ctx.status = 500
-    ctx.body = { error: err.message }
-  }
+  ctx.body = { fields: buildConfigSchema(), category_order: CATEGORY_ORDER }
 })
 
 // GET /api/hermes/hermes-config/raw — read raw YAML string
