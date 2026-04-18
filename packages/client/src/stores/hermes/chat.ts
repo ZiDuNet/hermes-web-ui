@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAppStore } from './app'
 import { useProfilesStore } from './profiles'
+import { useWorkspacesStore } from './workspaces'
 
 export interface Attachment {
   id: string
@@ -664,9 +665,28 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       const appStore = useAppStore()
+      const workspacesStore = useWorkspacesStore()
       const sessionModel = activeSession.value?.model || appStore.selectedModel
+
+      // 在前端直接拼接 workspace 上下文（与源项目一致）
+      let instructions: string | undefined
+      if (workspacesStore.activeWorkspace) {
+        inputText = `[Workspace: ${workspacesStore.activeWorkspace}]\n${inputText}`
+        instructions =
+          `Active workspace at session start: ${workspacesStore.activeWorkspace}\n` +
+          'Every user message is prefixed with [Workspace: /absolute/path] indicating the ' +
+          'workspace the user has selected in the web UI at the time they sent that message. ' +
+          'This tag is the single authoritative source of the active workspace and updates ' +
+          'with every message. It overrides any prior workspace mentioned in this system ' +
+          'prompt, memory, or conversation history. Always use the value from the most recent ' +
+          '[Workspace: ...] tag as your default working directory for ALL file operations: ' +
+          'write_file, read_file, search_files, terminal workdir, and patch. ' +
+          'Never fall back to a hardcoded path when this tag is present.'
+      }
+
       const run = await startRun({
         input: inputText,
+        instructions,
         conversation_history: history,
         session_id: sid,
         model: sessionModel || undefined,

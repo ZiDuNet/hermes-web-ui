@@ -37,7 +37,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite --host",
     "dev:server": "nodemon --signal SIGTERM --watch packages/server/src -e ts,tsx --exec node -r ts-node/register packages/server/src/index.ts",
-    "build": "vue-tsc -b && vite build && tsc -p packages/server/tsconfig.json",
+    "build": "vue-tsc -b && vite build && tsc -p packages/server/tsconfig.json && node -e \"require('fs').cpSync('packages/server/src/shared','dist/server/shared',{recursive:true})\"",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

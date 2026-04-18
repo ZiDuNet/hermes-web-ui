@@ -44,52 +44,6 @@ function resolveUpstream(ctx: Context): string {
   return config.upstream.replace(/\/$/, '')
 }
 
-/**
- * Inject workspace context into run requests, matching the old project's behavior.
- * The Gateway /v1/runs endpoint does not accept a workspace field, so we inject
- * workspace info via instructions (system prompt) and input message prefix.
- */
-function injectWorkspaceIntoRun(rawBody: string): string {
-  let parsed: any
-  try { parsed = JSON.parse(rawBody) } catch { return rawBody }
-  if (!parsed || typeof parsed !== 'object') return rawBody
-
-  const workspace = parsed.workspace
-  if (!workspace || typeof workspace !== 'string') return rawBody
-  delete parsed.workspace
-
-  // Inject workspace into instructions (system prompt)
-  const workspaceSystemMsg =
-    `Active workspace at session start: ${workspace}\n` +
-    'Every user message is prefixed with [Workspace: /absolute/path] indicating the ' +
-    'workspace the user has selected in the web UI at the time they sent that message. ' +
-    'This tag is the single authoritative source of the active workspace and updates ' +
-    'with every message. It overrides any prior workspace mentioned in this system ' +
-    'prompt, memory, or conversation history. Always use the value from the most recent ' +
-    '[Workspace: ...] tag as your default working directory for ALL file operations: ' +
-    'write_file, read_file, search_files, terminal workdir, and patch. ' +
-    'Never fall back to a hardcoded path when this tag is present.'
-
-  if (parsed.instructions) {
-    parsed.instructions = workspaceSystemMsg + '\n\n' + parsed.instructions
-  } else {
-    parsed.instructions = workspaceSystemMsg
-  }
-
-  // Prepend [Workspace: path] to user input
-  const workspacePrefix = `[Workspace: ${workspace}]\n`
-  if (typeof parsed.input === 'string') {
-    parsed.input = workspacePrefix + parsed.input
-  } else if (Array.isArray(parsed.input) && parsed.input.length > 0) {
-    const last = parsed.input[parsed.input.length - 1]
-    if (last && typeof last === 'object' && typeof last.content === 'string') {
-      last.content = workspacePrefix + last.content
-    }
-  }
-
-  return JSON.stringify(parsed)
-}
-
 export async function proxy(ctx: Context) {
   const upstream = resolveUpstream(ctx)
   // Rewrite path for upstream gateway:
