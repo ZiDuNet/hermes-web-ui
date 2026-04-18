@@ -31,12 +31,11 @@ const modelSearch = ref('')
 
 // Dropdown position (fixed positioning to avoid overflow clipping)
 const dropdownStyle = ref<Record<string, string>>({})
-const activeDropdownRef = ref<HTMLElement | null>(null)
 
 // ── Voice input (Web Speech API) ────────────────────────────────
 const isRecording = ref(false)
 const micSupported = ref(false)
-let recognition: SpeechRecognition | null = null
+let recognition: any = null
 
 onMounted(() => {
   // Voice input

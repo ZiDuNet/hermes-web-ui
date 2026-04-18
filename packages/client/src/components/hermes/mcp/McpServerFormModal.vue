@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  saved: []
+  saved: [data: { name: string; config: McpServerConfig }]
 }>()
 
 const showModal = ref(true)

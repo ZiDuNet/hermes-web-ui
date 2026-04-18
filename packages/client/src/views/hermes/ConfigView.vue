@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NPageHeader, NSpin, NSwitch, NSpace, NTab, NTabs } from 'naive-ui'
+import { NPageHeader, NSpin, NSwitch, NSpace } from 'naive-ui'
 import { useHermesConfigStore } from '@/stores/hermes/hermes-config'
 import ConfigPanel from '@/components/hermes/config/ConfigPanel.vue'
 import YamlEditor from '@/components/hermes/config/YamlEditor.vue'

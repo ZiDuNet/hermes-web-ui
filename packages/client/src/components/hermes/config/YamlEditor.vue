@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useMessage, NInput, NButton, NSpace } from 'naive-ui'
+import { useMessage, NInput, NButton } from 'naive-ui'
 import { useHermesConfigStore } from '@/stores/hermes/hermes-config'
 
 const { t } = useI18n()

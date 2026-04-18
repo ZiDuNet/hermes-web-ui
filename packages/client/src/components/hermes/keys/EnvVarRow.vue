@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useMessage, NInput, NButton, NSpace, NPopconfirm, NTooltip } from 'naive-ui'
+import { useMessage, NInput, NButton, NPopconfirm } from 'naive-ui'
 import type { EnvVarInfo } from '@/api/hermes/env'
 import { useKeysStore } from '@/stores/hermes/keys'
 

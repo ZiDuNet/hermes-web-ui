@@ -17,7 +17,7 @@ const searchQuery = ref('')
 // Fields for the active category
 const categoryFields = computed(() => {
   if (!store.schema) return []
-  const { fields, category_order } = store.schema
+  const { fields } = store.schema
 
   let entries = Object.entries(fields)
 
@@ -43,7 +43,7 @@ const fieldCountPerCat = computed(() => {
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     for (const [, s] of Object.entries(fields)) {
-      if (key.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)) {
+      if (s.description.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)) {
         counts[s.category] = (counts[s.category] || 0) + 1
       }
     }

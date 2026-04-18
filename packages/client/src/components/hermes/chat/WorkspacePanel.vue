@@ -24,9 +24,6 @@ const previewContent = ref('')
 const previewDirty = ref(false)
 const editing = ref(false)
 
-// Expanded dirs cache
-const expandedDirs = ref<Set<string>>(new Set())
-
 const workspacePath = computed(() => props.workspaceOverride || workspacesStore.activeWorkspace)
 const workspaceName = computed(() => workspacesStore.getWorkspaceName(workspacePath.value))
 
