@@ -85,6 +85,11 @@ const router = createRouter({
       name: 'hermes.keys',
       component: () => import('@/views/hermes/KeysView.vue'),
     },
+    {
+      path: '/hermes/mcp-servers',
+      name: 'hermes.mcpServers',
+      component: () => import('@/views/hermes/McpServersView.vue'),
+    },
   ],
 })
 

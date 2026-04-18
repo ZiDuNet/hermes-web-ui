@@ -168,8 +168,8 @@ workspaceRoutes.get('/api/hermes/workspace/browse', (ctx) => {
         return { name, path: fullPath }
       } catch { return null }
     })
-    .filter(Boolean) as { name: string; path: string }[]
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter(Boolean) as Array<{ name: string; path: string }>
+  entries.sort((a, b) => a.name.localeCompare(b.name))
 
   ctx.body = { path: resolved, entries, parent: resolved === '/' ? null : dirname(resolved) }
 })
