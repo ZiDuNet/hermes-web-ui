@@ -1,10 +1,9 @@
 import Router from '@koa/router'
 import { readFile, writeFile } from 'fs/promises'
 import { chmod } from 'fs/promises'
-import { resolve } from 'path'
 import { getActiveEnvPath } from '../../services/hermes/hermes-profile'
+import { getGatewayManager } from './gateways'
 
-const sharedDir = resolve(__dirname, '../../shared')
 const envPath = () => getActiveEnvPath()
 
 function parseEnv(raw: string): Record<string, string> {
@@ -87,13 +86,36 @@ function checkRateLimit(ip: string): boolean {
   return true
 }
 
-// Load env var definitions from shared JSON (cached)
+// 从 Gateway /api/env 获取 env var 定义（带缓存）
 let envVarsCache: Record<string, any> | null = null
+let envVarsCacheTime = 0
+const ENV_CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
+
 async function getEnvVarDefs(): Promise<Record<string, any>> {
-  if (envVarsCache) return envVarsCache
-  const raw = await readFile(resolve(sharedDir, 'hermes-env-vars.json'), 'utf-8')
-  envVarsCache = JSON.parse(raw)
-  return envVarsCache!
+  const now = Date.now()
+  if (envVarsCache && now - envVarsCacheTime < ENV_CACHE_TTL) return envVarsCache
+
+  const mgr = getGatewayManager()
+  const upstream = mgr ? mgr.getUpstream() : 'http://127.0.0.1:8642'
+  const res = await fetch(`${upstream}/api/env`, { signal: AbortSignal.timeout(5000) })
+  if (!res.ok) throw new Error(`Gateway /api/env returned ${res.status}`)
+
+  const data = await res.json() as Record<string, any>
+  // 转为 { key: { description, category, ... } } 格式
+  const defs: Record<string, any> = {}
+  for (const [key, info] of Object.entries(data)) {
+    defs[key] = {
+      description: info.description || '',
+      url: info.url || '',
+      category: info.category || '',
+      is_password: info.is_password || false,
+      tools: info.tools || [],
+      advanced: info.advanced || false,
+    }
+  }
+  envVarsCache = defs
+  envVarsCacheTime = now
+  return defs
 }
 
 export const envRoutes = new Router()
