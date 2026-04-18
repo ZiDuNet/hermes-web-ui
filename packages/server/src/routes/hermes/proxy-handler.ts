@@ -118,10 +118,6 @@ export async function proxy(ctx: Context) {
     let body: string | undefined
     if (ctx.req.method !== 'GET' && ctx.req.method !== 'HEAD') {
       body = (ctx as any).request.rawBody as string | undefined
-      // Inject workspace context for run requests
-      if (body && ctx.path === '/api/hermes/v1/runs' && ctx.req.method === 'POST') {
-        body = injectWorkspaceIntoRun(body)
-      }
     }
 
     const requestInit: RequestInit = {

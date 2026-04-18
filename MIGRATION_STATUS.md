@@ -35,6 +35,7 @@
 | Config 管理（config.yaml） | ✅ 完成 | `hermes-config.ts`(后端), `ConfigPanel.vue` + `AutoField.vue`(前端) | 180 字段、15 分类、搜索、YAML 模式 |
 | Keys 管理（.env） | ✅ 完成 | `env.ts`(后端), `KeysPanel.vue` + `EnvVarRow.vue`(前端) | 116 环境变量、脱敏、揭示、速率限制 |
 | Config Schema 提取 | ✅ 完成 | `shared/hermes-schema.json`, `hermes-defaults.json`, `hermes-env-vars.json` | 从 Python 动态 schema 提取为静态 JSON |
+| MCP Servers 管理 | ✅ 完成 | `mcp-servers.ts`(后端), `McpServersPanel.vue` + `McpServerCard.vue` + `McpServerFormModal.vue`(前端) | Level 1 纯配置管理，支持 stdio/http 类型 |
 
 ### hermes-web-ui 自有功能
 
@@ -43,13 +44,13 @@
 | 定时任务（Jobs） | ✅ 已有 | `JobsView.vue`, `jobs.ts` |
 | 模型提供商管理 | ✅ 已有 | `ModelsView.vue`, `models.ts` |
 | Profile 管理 | ✅ 已有 | `ProfilesView.vue`, `profiles.ts` |
-| Gateway 管理 | ✅ 已有 | `GatewaysView.vue`, `gateways.ts` |
+| Gateway 管理 | ✅ 已有 | `GatewaysView.vue`, `gateways.ts` | 启动时只检测状态，不自动启动（与源项目一致） |
 | 技能管理（Skills） | ✅ 已有 | `SkillsView.vue`, `skills.ts` |
 | 记忆管理（Memory） | ✅ 已有 | `MemoryView.vue` |
 | 日志查看（Logs） | ✅ 已有 | `LogsView.vue`, `logs.ts` |
 | 使用统计（Usage） | ✅ 已有 | `UsageView.vue`, `usage.ts` |
 | 渠道管理（Channels） | ✅ 已有 | `ChannelsView.vue` |
-| 终端（Terminal） | ✅ 已有 | `TerminalView.vue`, `terminal.ts` |
+| 终端（Terminal） | ✅ 已有 | `TerminalView.vue`, `terminal.ts` | dev 模式直连后端端口 |
 | i18n 中英文 | ✅ 已有 | `en.ts`, `zh.ts` |
 
 ---
@@ -101,6 +102,13 @@
 | 文件创建/下载/保存 | ✅ 一致 | 创建文件/文件夹、下载、保存编辑 | 同 | — |
 
 ### 行为一致性说明
+
+#### Gateway 启动策略：只检测不自动启动
+
+源项目（hermes-webui, Python）在启动时**不自动启动 gateway**，只读取 PID 文件和 config.yaml 检测运行状态，以只读方式展示给前端。用户需要手动通过 CLI 或前端 UI 启动/停止 gateway。
+
+本项目保持一致：`initGatewayManager()` 只调用 `detectAllOnStartup()` 进行状态检测，不调用 `startAll()`。前端 Gateways 页面的手动 start/stop 按钮仍可正常使用。
+> 此前目标项目会在启动时自动启动所有未运行的 gateway，导致 banner.txt ENOENT 等错误拖累启动流程、端口冲突自动改写 config.yaml 等问题。
 
 #### Config/Keys 保存后不自动重启 Gateway
 
@@ -165,6 +173,7 @@ packages/
 │   ├── routes/hermes/
 │   │   ├── hermes-config.ts    # Config CRUD API (6 endpoints)
 │   │   ├── env.ts              # Env var CRUD API (4 endpoints)
+│   │   ├── mcp-servers.ts      # MCP Servers CRUD API (4 endpoints)
 │   │   └── proxy-handler.ts    # 含 workspace 注入逻辑
 │   └── shared/
 │       ├── hermes-schema.json  # 180 config 字段定义
@@ -173,7 +182,8 @@ packages/
 ├── client/src/
 │   ├── api/hermes/
 │   │   ├── hermes-config.ts    # Config API 函数
-│   │   └── env.ts              # Env API 函数
+│   │   ├── env.ts              # Env API 函数
+│   │   └── mcp-servers.ts      # MCP Servers API 函数
 │   ├── stores/hermes/
 │   │   ├── hermes-config.ts    # Config Pinia store
 │   │   └── keys.ts             # Keys Pinia store
@@ -185,10 +195,17 @@ packages/
 │   │   │   ├── CategoryNav.vue # 分类侧边栏
 │   │   │   ├── AutoField.vue   # 自动字段渲染（switch/select/input/number）
 │   │   │   └── YamlEditor.vue  # YAML 原始编辑器
-│   │   └── keys/
+│   │   ├── keys/
+│   │   │   ├── KeysPanel.vue   # 主面板（分组折叠 + 搜索 + advanced 切换）
+│   │   │   └── EnvVarRow.vue   # 单行（显示/编辑/揭示/删除）
+│   │   └── mcp/
+│   │       ├── McpServersPanel.vue   # 主面板（服务器列表 + 添加按钮）
+│   │       ├── McpServerCard.vue     # 单个服务器卡片（展开详情 + 启用开关）
+│   │       └── McpServerFormModal.vue # 添加/编辑表单弹窗（stdio/http）
 │   │       ├── KeysPanel.vue   # 主面板（分组折叠 + 搜索 + advanced 切换）
 │   │       └── EnvVarRow.vue   # 单行（显示/编辑/揭示/删除）
 │   └── views/hermes/
 │       ├── ConfigView.vue      # Config 页面
-│       └── KeysView.vue        # Keys 页面
+│       ├── KeysView.vue        # Keys 页面
+│       └── McpServersView.vue  # MCP Servers 页面
 ```
