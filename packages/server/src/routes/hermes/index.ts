@@ -7,10 +7,6 @@ import { logRoutes } from './logs'
 import { weixinRoutes } from './weixin'
 import { codexAuthRoutes } from './codex-auth'
 import { gatewayRoutes } from './gateways'
-import { workspaceRoutes } from './workspaces'
-import { hermesConfigRoutes } from './hermes-config'
-import { envRoutes } from './env'
-import { mcpServerRoutes } from './mcp-servers'
 import { proxyRoutes, proxyMiddleware } from './proxy'
 import { setupTerminalWebSocket } from './terminal'
 
@@ -24,10 +20,6 @@ hermesRoutes.use(logRoutes.routes())
 hermesRoutes.use(weixinRoutes.routes())
 hermesRoutes.use(codexAuthRoutes.routes())
 hermesRoutes.use(gatewayRoutes.routes())
-hermesRoutes.use(workspaceRoutes.routes())
-hermesRoutes.use(hermesConfigRoutes.routes())
-hermesRoutes.use(envRoutes.routes())
-hermesRoutes.use(mcpServerRoutes.routes())
 hermesRoutes.use(proxyRoutes.routes())
 
 export { setupTerminalWebSocket, proxyMiddleware }

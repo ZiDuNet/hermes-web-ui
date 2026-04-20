@@ -4,7 +4,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAppStore } from './app'
 import { useProfilesStore } from './profiles'
-import { useWorkspacesStore } from './workspaces'
 
 export interface Attachment {
   id: string
@@ -152,7 +151,7 @@ function mapHermesSession(s: SessionSummary): Session {
     source: s.source || undefined,
     messages: [],
     createdAt: Math.round(s.started_at * 1000),
-    updatedAt: Math.round((s.ended_at || s.started_at) * 1000),
+    updatedAt: Math.round((s.last_active || s.ended_at || s.started_at) * 1000),
     model: s.model,
     provider: (s as any).billing_provider || '',
     messageCount: s.message_count,
@@ -249,6 +248,10 @@ export const useChatStore = defineStore('chat', () => {
 
   const activeSession = ref<Session | null>(null)
   const messages = computed<Message[]>(() => activeSession.value?.messages || [])
+
+  function isSessionLive(sessionId: string): boolean {
+    return streamStates.value.has(sessionId) || resumingRuns.value.has(sessionId)
+  }
 
   function persistSessionsList() {
     // Cache lightweight summaries only (messages are cached per-session).
@@ -665,29 +668,9 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       const appStore = useAppStore()
-      const workspacesStore = useWorkspacesStore()
       const sessionModel = activeSession.value?.model || appStore.selectedModel
-
-      // workspace 注入到请求，不修改用户显示的消息
-      let runInput: string | ChatMessage[] = inputText
-      let instructions: string | undefined
-      if (workspacesStore.activeWorkspace) {
-        runInput = `[Workspace: ${workspacesStore.activeWorkspace}]\n${inputText}`
-        instructions =
-          `Active workspace at session start: ${workspacesStore.activeWorkspace}\n` +
-          'Every user message is prefixed with [Workspace: /absolute/path] indicating the ' +
-          'workspace the user has selected in the web UI at the time they sent that message. ' +
-          'This tag is the single authoritative source of the active workspace and updates ' +
-          'with every message. It overrides any prior workspace mentioned in this system ' +
-          'prompt, memory, or conversation history. Always use the value from the most recent ' +
-          '[Workspace: ...] tag as your default working directory for ALL file operations: ' +
-          'write_file, read_file, search_files, terminal workdir, and patch. ' +
-          'Never fall back to a hardcoded path when this tag is present.'
-      }
-
       const run = await startRun({
-        input: runInput,
-        instructions,
+        input: inputText,
         conversation_history: history,
         session_id: sid,
         model: sessionModel || undefined,
@@ -933,6 +916,7 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     isStreaming,
     isRunActive,
+    isSessionLive,
     isLoadingSessions,
     isLoadingMessages,
     newChat,

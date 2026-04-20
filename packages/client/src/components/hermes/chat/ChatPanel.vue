@@ -6,8 +6,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ChatInput from './ChatInput.vue'
 import MessageList from './MessageList.vue'
-import TodoPanel from './TodoPanel.vue'
-import WorkspacePanel from './WorkspacePanel.vue'
 
 const chatStore = useChatStore()
 const message = useMessage()
@@ -22,8 +20,6 @@ const { t } = useI18n()
 const showSessions = ref(
   typeof window === 'undefined' || !window.matchMedia('(max-width: 768px)').matches,
 )
-const showTodoPanel = ref(false)
-const showWorkspacePanel = ref(false)
 let mobileQuery: MediaQueryList | null = null
 
 function handleSessionClick(sessionId: string) {
@@ -84,6 +80,15 @@ function sourceSortKey(source: string): number {
   return 0
 }
 
+function sortSessionsWithActiveFirst(items: Session[]): Session[] {
+  return [...items].sort((a, b) => {
+    const aLive = chatStore.isSessionLive(a.id)
+    const bLive = chatStore.isSessionLive(b.id)
+    if (aLive !== bLive) return aLive ? -1 : 1
+    return (b.updatedAt || 0) - (a.updatedAt || 0)
+  })
+}
+
 // Group sessions by source, with sort order
 interface SessionGroup {
   source: string
@@ -92,16 +97,17 @@ interface SessionGroup {
 }
 
 const groupedSessions = computed<SessionGroup[]>(() => {
-  const all = [...chatStore.sessions].sort((a, b) => b.createdAt - a.createdAt)
-
   const map = new Map<string, Session[]>()
-  for (const s of all) {
+  for (const s of chatStore.sessions) {
     const key = s.source || ''
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(s)
   }
 
   const keys = [...map.keys()].sort((a, b) => {
+    const aHasLive = map.get(a)?.some(s => chatStore.isSessionLive(s.id)) || false
+    const bHasLive = map.get(b)?.some(s => chatStore.isSessionLive(s.id)) || false
+    if (aHasLive !== bHasLive) return aHasLive ? -1 : 1
     const ka = sourceSortKey(a)
     const kb = sourceSortKey(b)
     if (ka !== kb) return ka - kb
@@ -111,7 +117,7 @@ const groupedSessions = computed<SessionGroup[]>(() => {
   return keys.map(key => ({
     source: key,
     label: key ? getSourceLabel(key) : t('chat.other'),
-    sessions: map.get(key)!,
+    sessions: sortSessionsWithActiveFirst(map.get(key)!),
   }))
 })
 
@@ -320,12 +326,33 @@ async function handleRenameConfirm() {
               v-for="s in group.sessions"
               :key="s.id"
               class="session-item"
-              :class="{ active: s.id === chatStore.activeSessionId }"
+              :class="{ active: s.id === chatStore.activeSessionId, live: chatStore.isSessionLive(s.id) }"
               @click="handleSessionClick(s.id)"
               @contextmenu="handleContextMenu($event, s.id)"
             >
               <div class="session-item-content">
-                <span class="session-item-title">{{ s.title }}</span>
+                <span class="session-item-title-row">
+                  <span
+                    v-if="chatStore.isSessionLive(s.id)"
+                    class="session-item-active-indicator"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      class="session-item-active-spinner"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    >
+                      <circle cx="12" cy="12" r="8" opacity="0.2" />
+                      <path d="M20 12a8 8 0 0 0-8-8" />
+                    </svg>
+                  </span>
+                  <span class="session-item-title">{{ s.title }}</span>
+                </span>
                 <span class="session-item-meta">
                   <span v-if="s.model" class="session-item-model">{{ s.model }}</span>
                   <span class="session-item-time">{{ formatTime(s.createdAt) }}</span>
@@ -379,7 +406,6 @@ async function handleRenameConfirm() {
 
     <!-- Chat Area -->
     <div class="chat-main">
-      <div class="chat-content-area">
       <header class="chat-header">
         <div class="header-left">
           <NButton quaternary size="small" @click="showSessions = !showSessions" circle>
@@ -391,26 +417,6 @@ async function handleRenameConfirm() {
           <span v-if="activeSessionSource" class="source-badge">{{ getSourceLabel(activeSessionSource) }}</span>
         </div>
         <div class="header-actions">
-          <NTooltip trigger="hover">
-            <template #trigger>
-              <NButton quaternary size="small" :type="showWorkspacePanel ? 'primary' : undefined" @click="showWorkspacePanel = !showWorkspacePanel" circle>
-                <template #icon>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                </template>
-              </NButton>
-            </template>
-            {{ t('chat.workspace') }}
-          </NTooltip>
-          <NTooltip trigger="hover">
-            <template #trigger>
-              <NButton quaternary size="small" :type="showTodoPanel ? 'primary' : undefined" @click="showTodoPanel = !showTodoPanel" circle>
-                <template #icon>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
-                </template>
-              </NButton>
-            </template>
-            {{ t('chat.currentTasks') }}
-          </NTooltip>
           <NTooltip trigger="hover">
             <template #trigger>
               <NButton quaternary size="small" @click="copySessionId()" circle>
@@ -435,27 +441,6 @@ async function handleRenameConfirm() {
         <span>{{ formatTokens(totalTokens) }} / {{ formatTokens(contextWindow) }}</span>
       </div>
       <ChatInput />
-      </div>
-      <!-- Todo sidebar (right side, toggleable) -->
-      <aside v-if="showTodoPanel" class="todo-sidebar">
-        <div class="todo-sidebar-header">
-          <span class="todo-sidebar-title">{{ t('chat.currentTasks') }}</span>
-          <button class="todo-close-btn" @click="showTodoPanel = false">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <TodoPanel />
-      </aside>
-      <!-- Workspace panel (right side, toggleable) -->
-      <aside v-if="showWorkspacePanel" class="workspace-sidebar">
-        <div class="todo-sidebar-header">
-          <span class="todo-sidebar-title">{{ t('chat.workspace') }}</span>
-          <button class="todo-close-btn" @click="showWorkspacePanel = false">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <WorkspacePanel />
-      </aside>
     </div>
   </div>
 </template>
@@ -635,11 +620,26 @@ async function handleRenameConfirm() {
     color: $text-primary;
     font-weight: 500;
   }
+
+  &.active .session-item-title {
+    color: $accent-primary;
+  }
+
+  &.live .session-item-title {
+    color: $accent-primary;
+  }
 }
 
 .session-item-content {
   flex: 1;
   overflow: hidden;
+}
+
+.session-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .session-item-title {
@@ -648,6 +648,19 @@ async function handleRenameConfirm() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.session-item-active-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: $accent-primary;
+}
+
+.session-item-active-spinner {
+  animation: session-spin 1.1s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(var(--accent-primary-rgb), 0.35));
 }
 
 .session-item-time {
@@ -693,14 +706,17 @@ async function handleRenameConfirm() {
   }
 }
 
-.chat-main {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-width: 0;
+@keyframes session-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.chat-content-area {
+.chat-main {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -758,61 +774,6 @@ async function handleRenameConfirm() {
   font-size: 11px;
   color: $text-muted;
   flex-shrink: 0;
-}
-
-// ── Todo sidebar (right panel) ─────────────────────────────────
-
-.todo-sidebar {
-  width: 260px;
-  border-left: 1px solid $border-color;
-  flex-shrink: 0;
-  background: $bg-card;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.todo-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 14px 12px;
-  border-bottom: 1px solid $border-light;
-  flex-shrink: 0;
-}
-
-.todo-sidebar-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: $text-muted;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.todo-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: $radius-sm;
-  background: transparent;
-  color: $text-secondary;
-  cursor: pointer;
-  transition: background $transition-fast, color $transition-fast;
-
-  &:hover { background: $bg-secondary; color: $text-primary; }
-}
-
-.workspace-sidebar {
-  width: 300px;
-  border-left: 1px solid $border-color;
-  flex-shrink: 0;
-  background: $bg-card;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 @media (max-width: $breakpoint-mobile) {

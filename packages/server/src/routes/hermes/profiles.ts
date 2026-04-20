@@ -208,7 +208,7 @@ profileRoutes.post('/api/hermes/profiles/import', async (ctx) => {
   }
 
   const tmpDir = join(tmpdir(), 'hermes-import')
-  await mkdir(tmpDir, { recursive: true, mode: 0o755 })
+  await mkdir(tmpDir, { recursive: true })
 
   // Read raw body and parse multipart
   const chunks: Buffer[] = []

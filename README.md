@@ -39,6 +39,8 @@
 - Real-time streaming via SSE with async run support
 - Multi-session management — create, rename, delete, switch between sessions
 - Session grouping by source (Telegram, Discord, Slack, etc.) with collapsible accordion
+- Active session indicator — live sessions pin to top with spinner icon
+- Sessions sorted by latest message time
 - Markdown rendering with syntax highlighting and code copy
 - Tool call detail expansion (arguments / result)
 - File upload support
@@ -83,8 +85,18 @@ Unified configuration for **8 platforms** in one page:
 
 - Auto-discover models from credential pool (`~/.hermes/auth.json`)
 - Fetch available models from each provider endpoint (`/v1/models`)
-- Add custom OpenAI-compatible providers
-- Provider-level model grouping
+- Add, update, and delete providers (preset & custom OpenAI-compatible)
+- OpenAI Codex OAuth login for Codex models
+- Provider-level model grouping with default model switching
+
+### Multi-Profile & Gateway
+
+- Create, rename, delete, and switch between Hermes profiles
+- Clone existing profile or import from archive (`.tar.gz`)
+- Export profile for backup or sharing
+- Multi-gateway management — start, stop, and monitor gateway per profile
+- Auto port conflict resolution
+- Profile-scoped configuration and cache isolation
 
 ### Skills & Memory
 
@@ -105,6 +117,7 @@ Unified configuration for **8 platforms** in one page:
 - Memory (enable/disable, char limits)
 - Session reset (idle timeout, scheduled reset)
 - Privacy (PII redaction)
+- Model settings (default model & provider)
 - API server configuration
 
 ### Web Terminal
@@ -149,24 +162,21 @@ hermes-web-ui start
 Run Web UI together with Hermes Agent:
 
 ```bash
+# Use pre-built image (Recommended)
+WEBUI_IMAGE=ekkoye8888/hermes-web-ui:latest docker compose up -d hermes-agent hermes-webui
+
+# Or build from source
 docker compose up -d --build hermes-agent hermes-webui
+
 docker compose logs -f hermes-webui
 ```
 
 Open **http://localhost:6060**
 
 - Persistent Hermes data is stored in `./hermes_data`
-- The web UI service is built from this repository's `Dockerfile`
+- Web UI auth token is stored in `./hermes_data/hermes-web-ui-data/.token`
+- On first run with auth enabled, the token is printed to container logs
 - All runtime settings are environment-variable driven in `docker-compose.yml`
-
-Override compose variables directly from command line (no `.env` file required):
-
-```bash
-PORT=16060 \
-UPSTREAM=http://127.0.0.1:8642 \
-HERMES_BIN=/opt/hermes/.venv/bin/hermes \
-docker compose up -d --build hermes-agent hermes-webui
-```
 
 For detailed notes and troubleshooting, see [`docs/docker.md`](./docs/docker.md).
 
@@ -232,6 +242,12 @@ The BFF layer handles API proxy (with path rewriting), SSE streaming, file uploa
 **Frontend:** Vue 3 + TypeScript + Vite + Naive UI + Pinia + Vue Router + vue-i18n + SCSS + markdown-it + highlight.js
 
 **Backend:** Koa 2 (BFF server) + node-pty (web terminal)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=EKKOLearnAI/hermes-web-ui&type=Date)](https://star-history.com/#EKKOLearnAI/hermes-web-ui&Date)
+
+<!-- If the chart above doesn't load, visit https://star-history.com/#EKKOLearnAI/hermes-web-ui -->
 
 ## License
 

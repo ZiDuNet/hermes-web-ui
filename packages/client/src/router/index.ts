@@ -61,11 +61,6 @@ const router = createRouter({
       component: () => import('@/views/hermes/GatewaysView.vue'),
     },
     {
-      path: '/hermes/workspaces',
-      name: 'hermes.workspaces',
-      component: () => import('@/views/hermes/WorkspacesView.vue'),
-    },
-    {
       path: '/hermes/channels',
       name: 'hermes.channels',
       component: () => import('@/views/hermes/ChannelsView.vue'),
@@ -74,21 +69,6 @@ const router = createRouter({
       path: '/hermes/terminal',
       name: 'hermes.terminal',
       component: () => import('@/views/hermes/TerminalView.vue'),
-    },
-    {
-      path: '/hermes/config',
-      name: 'hermes.config',
-      component: () => import('@/views/hermes/ConfigView.vue'),
-    },
-    {
-      path: '/hermes/keys',
-      name: 'hermes.keys',
-      component: () => import('@/views/hermes/KeysView.vue'),
-    },
-    {
-      path: '/hermes/mcp-servers',
-      name: 'hermes.mcpServers',
-      component: () => import('@/views/hermes/McpServersView.vue'),
     },
   ],
 })
