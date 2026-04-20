@@ -232,6 +232,7 @@ export default {
   // Models
   models: {
     title: 'Models',
+    searchPlaceholder: 'Search models...',
     addProvider: 'Add Provider',
     providerType: 'Provider Type',
     preset: 'Preset',
